@@ -63,14 +63,13 @@ public abstract class AbstractKeyValueStoreTest {
     @After
     public void after() {
         store.close();
-        context.close();
         driver.clear();
     }
 
     private static Map<Integer, String> getContents(final KeyValueIterator<Integer, String> iter) {
         final HashMap<Integer, String> result = new HashMap<>();
         while (iter.hasNext()) {
-            KeyValue<Integer, String> entry = iter.next();
+            final KeyValue<Integer, String> entry = iter.next();
             result.put(entry.key, entry.value);
         }
         return result;
@@ -350,7 +349,7 @@ public abstract class AbstractKeyValueStoreTest {
 
     @Test
     public void shouldPutAll() {
-        List<KeyValue<Integer, String>> entries = new ArrayList<>();
+        final List<KeyValue<Integer, String>> entries = new ArrayList<>();
         entries.add(new KeyValue<>(1, "one"));
         entries.add(new KeyValue<>(2, "two"));
 

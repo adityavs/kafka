@@ -23,8 +23,8 @@ from kafkatest.services.zookeeper import ZookeeperService
 from kafkatest.services.kafka import KafkaService
 from kafkatest.version import DEV_BRANCH
 
-STREAMS_SIMPLE_TESTS = ["streamprocess", "streamprocesswithsink", "streamprocesswithstatestore"]
-STREAMS_COUNT_TESTS = ["streamcount", "streamcountwindowed", "streamprocesswithstatestore"]
+STREAMS_SIMPLE_TESTS = ["streamprocess", "streamprocesswithsink", "streamprocesswithstatestore", "streamprocesswithwindowstore"]
+STREAMS_COUNT_TESTS = ["streamcount", "streamcountwindowed"]
 STREAMS_JOIN_TESTS = ["streamtablejoin", "streamstreamjoin", "tabletablejoin"]
 NON_STREAMS_TESTS = ["consume", "consumeproduce"]
 
@@ -51,7 +51,11 @@ class StreamsSimpleBenchmarkTest(Test):
         self.replication = 1
 
     @cluster(num_nodes=12)
-    @matrix(test=["consume", "consumeproduce", "streams-simple", "streams-count", "streams-join"], scale=[1])
+    @matrix(test=["consume", "consumeproduce",
+                  "streamprocess", "streamprocesswithsink", "streamprocesswithstatestore", "streamprocesswithwindowstore",
+                  "streamcount", "streamcountwindowed",
+                  "streamtablejoin", "streamstreamjoin", "tabletablejoin"],
+            scale=[1])
     def test_simple_benchmark(self, test, scale):
         """
         Run simple Kafka Streams benchmark
@@ -107,22 +111,22 @@ class StreamsSimpleBenchmarkTest(Test):
 
         if test == ALL_TEST:
             for single_test in STREAMS_SIMPLE_TESTS + STREAMS_COUNT_TESTS + STREAMS_JOIN_TESTS:
-                self.run_test(single_test, scale)
+                self.execute(single_test, scale)
         elif test == STREAMS_SIMPLE_TEST:
             for single_test in STREAMS_SIMPLE_TESTS:
-                self.run_test(single_test, scale)
+                self.execute(single_test, scale)
         elif test == STREAMS_COUNT_TEST:
             for single_test in STREAMS_COUNT_TESTS:
-                self.run_test(single_test, scale)
+                self.execute(single_test, scale)
         elif test == STREAMS_JOIN_TEST:
             for single_test in STREAMS_JOIN_TESTS:
-                self.run_test(single_test, scale)
+                self.execute(single_test, scale)
         else:
-            self.run_test(test, scale)
+            self.execute(test, scale)
 
         return self.final
 
-    def run_test(self, test, scale):
+    def execute(self, test, scale):
 
         ################
         # RUN PHASE

@@ -15,16 +15,15 @@
 
 import os.path
 import signal
-
 import streams_property
-
 from ducktape.services.service import Service
 from ducktape.utils.util import wait_until
 from kafkatest.directory_layout.kafka_path import KafkaPathResolverMixin
-from kafkatest.services.monitor.jmx import JmxMixin
 from kafkatest.services.kafka import KafkaConfig
-from kafkatest.version import LATEST_0_10_0, LATEST_0_10_1
+from kafkatest.services.monitor.jmx import JmxMixin
+from kafkatest.version import LATEST_0_10_0, LATEST_0_10_1, LATEST_0_10_2, LATEST_0_11_0, LATEST_1_0, LATEST_1_1, LATEST_2_0
 
+STATE_DIR = "state.dir"
 
 class StreamsTestBaseService(KafkaPathResolverMixin, JmxMixin, Service):
     """Base class for Streams Test services providing some common settings and functionality"""
@@ -52,6 +51,33 @@ class StreamsTestBaseService(KafkaPathResolverMixin, JmxMixin, Service):
             "collect_default": True},
         "streams_stderr": {
             "path": STDERR_FILE,
+            "collect_default": True},
+        "streams_log.1": {
+            "path": LOG_FILE + ".1",
+            "collect_default": True},
+        "streams_stdout.1": {
+            "path": STDOUT_FILE + ".1",
+            "collect_default": True},
+        "streams_stderr.1": {
+            "path": STDERR_FILE + ".1",
+            "collect_default": True},
+        "streams_log.2": {
+            "path": LOG_FILE + ".2",
+            "collect_default": True},
+        "streams_stdout.2": {
+            "path": STDOUT_FILE + ".2",
+            "collect_default": True},
+        "streams_stderr.2": {
+            "path": STDERR_FILE + ".2",
+            "collect_default": True},
+        "streams_log.3": {
+            "path": LOG_FILE + ".3",
+            "collect_default": True},
+        "streams_stdout.3": {
+            "path": STDOUT_FILE + ".3",
+            "collect_default": True},
+        "streams_stderr.3": {
+            "path": STDERR_FILE + ".3",
             "collect_default": True},
         "streams_log.0-1": {
             "path": LOG_FILE + ".0-1",
@@ -308,7 +334,6 @@ class StreamsSmokeTestDriverService(StreamsSmokeTestBaseService):
 
     def start_cmd(self, node):
         args = self.args.copy()
-        args['kafka'] = self.kafka.bootstrap_servers()
         args['config_file'] = self.CONFIG_FILE
         args['stdout'] = self.STDOUT_FILE
         args['stderr'] = self.STDERR_FILE
@@ -319,7 +344,7 @@ class StreamsSmokeTestDriverService(StreamsSmokeTestBaseService):
 
         cmd = "( export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%(log4j)s\"; " \
               "INCLUDE_TEST_JARS=true %(kafka_run_class)s %(streams_class_name)s " \
-              " %(kafka)s %(config_file)s %(user_test_args)s %(disable_auto_terminate)s" \
+              " %(config_file)s %(user_test_args1)s %(disable_auto_terminate)s" \
               " & echo $! >&3 ) 1>> %(stdout)s 2>> %(stderr)s 3> %(pidfile)s" % args
 
         return cmd
@@ -399,12 +424,32 @@ class StreamsStandbyTaskService(StreamsTestBaseService):
                                                         configs)
 
 
-class StreamsRepeatingIntegerKeyProducerService(StreamsTestBaseService):
-    def __init__(self, test_context, kafka, configs):
-        super(StreamsRepeatingIntegerKeyProducerService, self).__init__(test_context,
-                                                                        kafka,
-                                                                        "org.apache.kafka.streams.tests.StreamsRepeatingIntegerKeyProducer",
-                                                                        configs)
+class StreamsOptimizedUpgradeTestService(StreamsTestBaseService):
+    def __init__(self, test_context, kafka):
+        super(StreamsOptimizedUpgradeTestService, self).__init__(test_context,
+                                                                 kafka,
+                                                                 "org.apache.kafka.streams.tests.StreamsOptimizedTest",
+                                                                 "")
+        self.OPTIMIZED_CONFIG = 'none'
+        self.INPUT_TOPIC = None
+        self.AGGREGATION_TOPIC = None
+        self.REDUCE_TOPIC = None
+        self.JOIN_TOPIC = None
+
+    def prop_file(self):
+        properties = {streams_property.STATE_DIR: self.PERSISTENT_ROOT,
+                      streams_property.KAFKA_SERVERS: self.kafka.bootstrap_servers()}
+
+        properties['topology.optimization'] = self.OPTIMIZED_CONFIG
+        properties['input.topic'] = self.INPUT_TOPIC
+        properties['aggregation.topic'] = self.AGGREGATION_TOPIC
+        properties['reduce.topic'] = self.REDUCE_TOPIC
+        properties['join.topic'] = self.JOIN_TOPIC
+
+        cfg = KafkaConfig(**properties)
+        return cfg.render()
+
+
 class StreamsUpgradeTestJobRunnerService(StreamsTestBaseService):
     def __init__(self, test_context, kafka):
         super(StreamsUpgradeTestJobRunnerService, self).__init__(test_context,
@@ -412,6 +457,7 @@ class StreamsUpgradeTestJobRunnerService(StreamsTestBaseService):
                                                                  "org.apache.kafka.streams.tests.StreamsUpgradeTest",
                                                                  "")
         self.UPGRADE_FROM = None
+        self.UPGRADE_TO = None
 
     def set_version(self, kafka_streams_version):
         self.KAFKA_STREAMS_VERSION = kafka_streams_version
@@ -419,17 +465,27 @@ class StreamsUpgradeTestJobRunnerService(StreamsTestBaseService):
     def set_upgrade_from(self, upgrade_from):
         self.UPGRADE_FROM = upgrade_from
 
+    def set_upgrade_to(self, upgrade_to):
+        self.UPGRADE_TO = upgrade_to
+
     def prop_file(self):
-        properties = {STATE_DIR: self.PERSISTENT_ROOT}
+        properties = {streams_property.STATE_DIR: self.PERSISTENT_ROOT,
+                      streams_property.KAFKA_SERVERS: self.kafka.bootstrap_servers()}
         if self.UPGRADE_FROM is not None:
             properties['upgrade.from'] = self.UPGRADE_FROM
+        if self.UPGRADE_TO == "future_version":
+            properties['test.future.metadata'] = "any_value"
 
         cfg = KafkaConfig(**properties)
         return cfg.render()
 
     def start_cmd(self, node):
         args = self.args.copy()
-        args['kafka'] = self.kafka.bootstrap_servers()
+        if self.KAFKA_STREAMS_VERSION in [str(LATEST_0_10_0), str(LATEST_0_10_1), str(LATEST_0_10_2),
+                                          str(LATEST_0_11_0), str(LATEST_1_0), str(LATEST_1_1), str(LATEST_2_0)]:
+            args['kafka'] = self.kafka.bootstrap_servers()
+        else:
+            args['kafka'] = ""
         if self.KAFKA_STREAMS_VERSION == str(LATEST_0_10_0) or self.KAFKA_STREAMS_VERSION == str(LATEST_0_10_1):
             args['zk'] = self.kafka.zk.connect_setting()
         else:
@@ -444,9 +500,31 @@ class StreamsUpgradeTestJobRunnerService(StreamsTestBaseService):
 
         cmd = "( export KAFKA_LOG4J_OPTS=\"-Dlog4j.configuration=file:%(log4j)s\"; " \
               "INCLUDE_TEST_JARS=true UPGRADE_KAFKA_STREAMS_TEST_VERSION=%(version)s " \
-              " %(kafka_run_class)s %(streams_class_name)s  %(kafka)s %(zk)s %(config_file)s " \
+              " %(kafka_run_class)s %(streams_class_name)s %(kafka)s %(zk)s %(config_file)s " \
               " & echo $! >&3 ) 1>> %(stdout)s 2>> %(stderr)s 3> %(pidfile)s" % args
 
         self.logger.info("Executing: " + cmd)
 
         return cmd
+
+
+class StreamsNamedRepartitionTopicService(StreamsTestBaseService):
+    def __init__(self, test_context, kafka):
+        super(StreamsNamedRepartitionTopicService, self).__init__(test_context,
+                                                                  kafka,
+                                                                  "org.apache.kafka.streams.tests.StreamsNamedRepartitionTest",
+                                                                  "")
+        self.ADD_ADDITIONAL_OPS = 'false'
+        self.INPUT_TOPIC = None
+        self.AGGREGATION_TOPIC = None
+
+    def prop_file(self):
+        properties = {streams_property.STATE_DIR: self.PERSISTENT_ROOT,
+                      streams_property.KAFKA_SERVERS: self.kafka.bootstrap_servers()}
+
+        properties['input.topic'] = self.INPUT_TOPIC
+        properties['aggregation.topic'] = self.AGGREGATION_TOPIC
+        properties['add.operations'] = self.ADD_ADDITIONAL_OPS
+
+        cfg = KafkaConfig(**properties)
+        return cfg.render()
